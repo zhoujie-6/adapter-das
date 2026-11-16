@@ -16,3 +16,24 @@ def test_cpu_oracles(case):
                VLLM_ROCM_USE_AITER="0")
     subprocess.run([sys.executable, "-m", "pytest", "-q", str(path)],
                    env=env, check=True)
+
+
+def test_ct_int8_empty_and_nonempty_pcp_rows(monkeypatch):
+    from types import SimpleNamespace
+    import torch
+    from hcu_adapter.bridges.vllm_dsv41.linear import (
+        CompressedTensorsLinearMethod, HcuDSV41ChannelInt8LinearMethod,
+    )
+
+    method = object.__new__(HcuDSV41ChannelInt8LinearMethod)
+    layer = SimpleNamespace(logical_widths=[3, 5])
+    x = torch.empty(2, 0, 4, dtype=torch.bfloat16)
+    out = method.apply(layer, x)
+    assert out.shape == (2, 0, 8) and out.dtype == x.dtype
+    sample = torch.ones(2, 4)
+    bias = torch.ones(8)
+    calls = []
+    monkeypatch.setattr(CompressedTensorsLinearMethod, "apply",
+                        lambda self, l, data, b: calls.append((l, data, b)) or sample)
+    assert method.apply(layer, sample, bias) is sample
+    assert calls == [(layer, sample, bias)]

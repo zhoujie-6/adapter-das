@@ -20,3 +20,12 @@ class HcuDSV41ChannelFP8LinearMethod(CompressedTensorsLinearMethod):
         dtype = x.orig_dtype if isinstance(x, QuantizedActivation) else x.dtype
         dtype = layer.scheme.fp8_linear.config.out_dtype or dtype
         return torch.empty((*shape[:-1], layer.weight.shape[1]), dtype=dtype, device=data.device)
+
+
+@register_weight_loader_v2_supported_method
+class HcuDSV41ChannelInt8LinearMethod(CompressedTensorsLinearMethod):
+    """Skip CT device quantization for an empty PCP-local token batch."""
+    def apply(self, layer, x, bias=None):
+        if x.ndim < 2 or prod(x.shape[:-1]) != 0:
+            return super().apply(layer, x, bias)
+        return x.new_empty((*x.shape[:-1], sum(layer.logical_widths)))
